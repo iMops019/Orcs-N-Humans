@@ -50,3 +50,11 @@ imgui.ini
 # executable via engine::save::resolveSaveFilePath(), never at repo root,
 # but ignored here too in case a build config ever lands one here.
 /save.json
+
+# Reference-only source assets (raw Meshy .blend downloads, unprocessed
+# packs) not consumed by the engine's PNG-based texture pipeline - see
+# Dark X Engine's own .gitignore for the same convention. Kept locally
+# for future re-derivation (a bad render, a new pose), not tracked in
+# git: these are large (Meshy's un-retopologized meshes run 10s-100s of
+# MB each) and easy to regenerate from Meshy if ever lost.
+/reference/
