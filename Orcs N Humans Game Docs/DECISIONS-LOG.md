@@ -3,6 +3,51 @@
 Newest first. Records *why*, not just *what* — see the engine repo's
 own `DECISIONS-LOG.md` for the same convention.
 
+## 2026-09-14 — First two CharacterRig entries: goblin and the Bow Character body
+
+`assets/data/character_rigs.json` now has real rigs for both the
+goblin (enemy) and the peasant body (Bow Character base) - 10 bones
+each (torso, head, upper-arm/forearm x2, thigh/shin x2), art at
+`assets/textures/characters/<name>/`. Built from Meshy's rigged FBX
+exports via `DarkXEngine/tools/BlenderScripts/segment_rigged_character.py`
+(see that engine repo's own DECISIONS-LOG for the two real Blender-
+scripting bugs found getting it working - an `--background` operator-
+context gotcha, and a parent/armature-deletion scale bug).
+
+Every bone's `anchorX/anchorY` and `attachX/attachY` are **computed**,
+not eyeballed - the script projects each bucket's primary skeleton
+joint (shoulder/elbow/hip/knee/neck) through the exact same camera the
+parts were rendered with (`bpy_extras.object_utils.world_to_camera_view`),
+so the numbers are pixel-accurate to the source geometry. Verified two
+ways: read `game/anim/AnimationSampler.cpp`/`ClipPlayer.cpp` to confirm
+the exact runtime formula (world position = summed `attachX/Y` up the
+parent chain; `anchorX/Y` is the pivot fraction within each part's own
+image), then reimplemented that formula in a throwaway Python compositor
+and rendered both rigs back into single images - both reassembled into
+correctly-proportioned, recognizable standing characters.
+
+**Deliberately not done yet:** actual posed clips (Idle/Walk/Attack -
+keyframing the curves on top of this bind pose) need visual, iterative
+authoring in the 2D Animator's Clips tab, which isn't a blind-JSON task
+the way the rig skeleton itself was. Waiting on the user's Game Editor
+rebuild (see the user's own account of *why* it needs rebuilding -
+multiple game sessions had ended up sharing one Dark X Engine checkout
+instead of each game's own submodule copy, mixing content across
+games/games' Game Editor tabs) before that work happens. Draw order
+(which bone draws in front of which) is also an unverified first guess
+- easy to fix visually once the Editor is usable again.
+
+**Where this data lives, on purpose:** `Orcs N Humans`'s own `assets/`,
+never `DarkXEngine/assets/` (even though the Game Editor tool itself is
+hardwired via CMake to read/write whichever engine checkout it's built
+from - see `GameEditor`'s `DARKX_SOURCE_ASSETS_DIR`). Character rig/
+sprite data is per-game content, the same category `assets/data/*.json`
+game data (removed from the engine repo entirely, see that repo's
+"Bane of the Outcasts removed") already established shouldn't live in
+the shared engine repo.
+
+## 2026-09-13 — Phase 1 built: one state, not a StateStack of them
+
 ## 2026-09-13 — Phase 1 built: one state, not a StateStack of them
 
 The whole survival loop (spawner, combat, XP orbs, the pick-1-of-4
