@@ -6,26 +6,31 @@
       submodule
 - [x] Root CMake project consuming the submodule + a `game/` target
 - [x] Minimal bootable `PlaceholderState` (window + clear + static
-      "player"/"goblin" rects) proving the wiring compiles and runs
+      "player"/"goblin" rects) proving the wiring compiles and runs -
+      since superseded by Phase 1's `SwarmArenaState` and deleted
 - [x] This docs folder
-- [ ] User confirms it builds and launches on their machine
+- [x] User confirms it builds and launches on their machine
 
 ## Phase 1 — Core survival loop
 
-- [ ] Swarm spawner/director: waves of goblins spawn around the
-      player and path toward them (reuse engine nav/steering)
-- [ ] One placeholder attack (auto-fires at nearest enemy) and basic
-      player movement/HP
-- [ ] Enemy tier system: Normal/Elite/Epic/Legendary as data, driving
-      spawn weight, HP/damage scaling, and (stub) loot/XP value
-      differences
-- [ ] XP orbs on kill -> in-run level bar -> pick-1-of-4 level-up
-      screen (even with a tiny placeholder boon list)
-- [ ] End-of-run summary screen: kills-by-tier, Overall XP awarded
-      (see `01-VISION-AND-GOALS.md`'s formula), win/death both handled
-- [ ] Stress-test toward ~1,000 concurrent enemies with F3's DebugHud;
-      only then decide if/what needs batching (see
-      `03-TECH-ARCHITECTURE.md`)
+- [x] Swarm spawner/director: waves of goblins spawn around the
+      player and path toward them (`SwarmArenaState` + `SwarmSystems` -
+      straight-line seek, not full nav/pathfinding: an open arena with
+      no obstacles doesn't need it, see `03-TECH-ARCHITECTURE.md`)
+- [x] One placeholder attack (auto-fires at nearest enemy in range) and
+      basic player movement/HP (WASD, ECS-free `PlayerState`)
+- [x] Enemy tier system: Normal/Elite/Epic/Legendary as data
+      (`assets/data/enemy_tiers.json`), driving spawn weight, HP/damage
+      scaling, and per-tier orb/Overall XP value
+- [x] XP orbs on kill -> in-run level bar -> pick-1-of-4 level-up
+      screen (4 fixed placeholder boons - see `Boons.cpp`)
+- [x] End-of-run summary screen: kills-by-tier, Overall XP awarded
+      (see `01-VISION-AND-GOALS.md`'s formula), win (survive 3:00) and
+      death both handled
+- [ ] Stress-test toward ~1,000 concurrent enemies with F3's DebugHud
+      (F6 spawns a 100-enemy burst for this); only then decide if/what
+      needs batching (see `03-TECH-ARCHITECTURE.md`) - **user to run
+      this pass and report back**
 
 ## Phase 2 — Town + Overall progression
 

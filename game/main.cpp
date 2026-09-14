@@ -9,14 +9,14 @@
 #include "engine/render/Renderer.h"
 #include "engine/scene/StateStack.h"
 
-#include "PlaceholderState.h"
+#include "swarm/SwarmArenaState.h"
 
-// Phase 0 entry point - proves the DarkXEngine submodule builds and
-// runs standalone. No save system, audio, or menu stack yet (those
-// come with the states that actually need them - see
-// Orcs N Humans Game Docs/04-ROADMAP.md). Structurally this mirrors
-// Dark X Engine's own game/main.cpp (see that repo's git history,
-// "Bane of the Outcasts removed") minus everything BotO-specific.
+// Phase 1 entry point - boots straight into the swarm survival loop
+// (see Orcs N Humans Game Docs/04-ROADMAP.md). No save system, audio,
+// or menu stack yet (those come with Phase 2's town hub). Structurally
+// this mirrors Dark X Engine's own game/main.cpp (see that repo's git
+// history, "Bane of the Outcasts removed") minus everything
+// BotO-specific.
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::printf("SDL_Init failed: %s\n", SDL_GetError());
@@ -53,9 +53,13 @@ int main(int argc, char* argv[]) {
         engine::assets::AssetManager assets(renderer);
         engine::input::InputMap input;
         input.bindKey(SDL_SCANCODE_ESCAPE, "Quit");
+        input.bindKey(SDL_SCANCODE_W, "MoveUp");
+        input.bindKey(SDL_SCANCODE_S, "MoveDown");
+        input.bindKey(SDL_SCANCODE_A, "MoveLeft");
+        input.bindKey(SDL_SCANCODE_D, "MoveRight");
 
         engine::scene::StateStack stateStack;
-        stateStack.push(std::make_unique<game::PlaceholderState>(windowWidth, windowHeight), renderer, assets);
+        stateStack.push(std::make_unique<game::swarm::SwarmArenaState>(windowWidth, windowHeight), renderer, assets);
 
         Uint64 previousTicks = SDL_GetPerformanceCounter();
         const Uint64 frequency = SDL_GetPerformanceFrequency();

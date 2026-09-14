@@ -3,6 +3,47 @@
 Newest first. Records *why*, not just *what* — see the engine repo's
 own `DECISIONS-LOG.md` for the same convention.
 
+## 2026-09-13 — Phase 1 built: one state, not a StateStack of them
+
+The whole survival loop (spawner, combat, XP orbs, the pick-1-of-4
+level-up pause, and the end-of-run summary) lives in one
+`SwarmArenaState`, switching internally between `Playing`/`LevelUp`/
+`Summary` via a private enum, rather than three separate `GameState`s
+pushed/popped on the `StateStack`. There is no town/menu flow yet for
+a real state transition to land in - that only arrives in Phase 2 - so
+splitting this up now would just be premature structure with nowhere
+useful to go; "press Enter on the summary screen" currently just calls
+`resetRun()` in place. Expect this to get split apart once Phase 2's
+town hub exists and an actual `NextState`-driven transition out of a
+finished run is possible.
+
+Enemies use no pathfinding, just a normalized vector straight at the
+player (`SwarmSystems::updateEnemySeek`) - this is an open arena with
+no obstacles, so the engine's nav/flow-field system (built for the RTS,
+see `project_rts-supercharge` in the Dark X Engine memory) would be
+solving a problem this game doesn't have yet. Revisit if/when dungeons
+get terrain.
+
+Projectiles are fire-and-forget straight lines locked to the target's
+position at the moment of firing, not homing entities tracking a
+stored target - `engine::ecs::Entity` has no generation counter (see
+`engine/ecs/Entity.h`), so a stored target id could go stale (or even
+get reused) before a slow shot arrives; this also matches how the
+genre's projectiles read anyway (Vampire Survivors' knife, this game's
+arrow).
+
+Enemy HP/damage/spawn-weight/XP values are loaded from
+`assets/data/enemy_tiers.json` at runtime (`TierTable::loadFromFile`),
+falling back to the same numbers hardcoded if the file is missing or
+malformed - so a bad/missing data file never prevents the game from
+booting, and the numbers from `01-VISION-AND-GOALS.md`'s table are
+real, tunable data rather than a promise made only in docs.
+
+The stress-test-toward-1,000-enemies roadmap item is **not** done by
+Claude - per `02-COLLABORATION-WORKFLOW.md`, feel/performance-in-play
+is the user's pass, run with F3's DebugHud open and F6 (spawns a
+100-enemy burst) held down as needed.
+
 ## 2026-09-13 — Project started, engine consumed as a git submodule
 
 New project: a Halls of Torment / Vampire Survivors-like on Dark X

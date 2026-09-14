@@ -1,0 +1,9 @@
+{
+  "dungeons": [
+    {
+      "id": "goblin_camp",
+      "displayName": "Goblin Camp",
+      "baseXp": 100
+    }
+  ]
+}
