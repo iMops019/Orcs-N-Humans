@@ -1,0 +1,23 @@
+{
+  "name": "orcs-n-humans",
+  "version": "0.1.0",
+  "dependencies": [
+    "sdl3",
+    {
+      "name": "sdl3-image",
+      "features": ["png", "jpeg"]
+    },
+    "sdl3-mixer",
+    "sdl3-ttf",
+    "nlohmann-json",
+    {
+      "name": "imgui",
+      "features": ["win32-binding", "dx11-binding"]
+    }
+  ],
+  "builtin-baseline": "e03dc9b29710050cd1018bc5674688108658d327",
+  "overrides": [
+    { "name": "nlohmann-json", "version": "3.12.0" },
+    { "name": "imgui", "version": "1.92.8" }
+  ]
+}

@@ -1,0 +1,52 @@
+# Build output
+build/
+vcpkg_installed/
+out/
+bin/
+obj/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# Compiled binaries / object files
+*.obj
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# Local Claude Code settings (machine-specific, not shared)
+.claude/settings.local.json
+
+# OS clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ImGui auto-generated window layout state (DarkXEngine/tools/GameEditor,
+# built as part of this repo via the submodule) - runtime artifact, not
+# project content.
+imgui.ini
+
+# Player save data - not project content. Resolved next to the
+# executable via engine::save::resolveSaveFilePath(), never at repo root,
+# but ignored here too in case a build config ever lands one here.
+/save.json
