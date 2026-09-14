@@ -40,12 +40,12 @@ them is the most common way this genre's progression math breaks:
   Passive Tree. This is the real long-term progression — it is what
   makes the *next* run start stronger, not the in-run boon picks.
 
-## Overall XP formula (recommendation)
+## Overall XP formula (confirmed)
 
 The user's own framing named two options: sum up a per-tier value for
 every enemy killed (Normal/Elite/Epic/Legendary each worth some
 number, added together), or a flat reward per dungeon
-("Dungeon 1 = 100xp, Dungeon 2 = 200xp"). **Recommendation: do both,
+("Dungeon 1 = 100xp, Dungeon 2 = 200xp"). **Confirmed: do both,
 combined** —
 
 ```
@@ -76,21 +76,45 @@ Why not either alone:
   than the dominant term that a runaway kill count could otherwise
   become.
 
-This is a **starting point, not a locked decision** — `dungeonBaseXp`
-and `tierXpValue` are both meant to live in data files (matching the
-engine's existing data-driven item/affix philosophy) so the actual
-numbers get tuned by feel once there's a playable loop, not designed
-on paper. See [DECISIONS-LOG.md](DECISIONS-LOG.md).
+The formula shape is locked; the actual `dungeonBaseXp` and
+`tierXpValue` numbers are not — both are meant to live in data files
+(matching the engine's existing data-driven item/affix philosophy) so
+they get tuned by feel once there's a playable loop, not designed on
+paper. See [DECISIONS-LOG.md](DECISIONS-LOG.md).
 
 ## Enemy tiers
 
 Every enemy in the game is one of **Normal / Elite / Epic /
-Legendary** — the same four-tier ladder drives loot rarity odds,
-Overall XP value (above), and (later) visual distinctiveness. For
-Phase 0/1, all four tiers share **one placeholder sprite** (a small 2D
-Meshy-generated goblin), differentiated by tint/scale only, so the
-tier *system* (spawning, XP, loot-table hookup) can be built and
-proven before any real art exists. See
+Legendary**. The same four-tier ladder drives four things at once:
+
+- **HP and damage scaling** (confirmed 2026-09-13) — each tier
+  multiplies a shared base enemy stat block. Starting-point
+  multipliers (data-driven, tunable, not balanced yet):
+
+  | Tier      | HP ×  | Damage × | Spawn weight       |
+  |-----------|-------|----------|--------------------|
+  | Normal    | 1×    | 1×       | common (the swarm) |
+  | Elite     | 4×    | 1.5×     | uncommon           |
+  | Epic      | 12×   | 2.5×     | rare                |
+  | Legendary | 40×   | 4×       | very rare / capped per run |
+
+  These are intentionally front-loaded toward HP over damage — a
+  Legendary should feel like a tanky, dangerous detour from the swarm,
+  not an instant-death spike that punishes just being near it while
+  fighting Normals.
+- **Overall XP contribution** (above) — deliberately *not* scaled 1:1
+  with the HP multiplier (a 40×-HP Legendary is not worth 40× the XP)
+  so the flat per-dungeon base stays the dominant term and tier kills
+  stay a bonus, not the whole economy.
+- **Loot rarity odds** — higher tiers roll better on the (Phase 3)
+  loot table.
+- **(Later) visual distinctiveness** — see the placeholder note below.
+
+For Phase 0/1, all four tiers share **one placeholder sprite** (a
+small 2D Meshy-generated goblin), differentiated by tint/scale only
+(which conveniently also doubles as the tier's visual HP-scaling
+tell), so the tier *system* (stats, spawning, XP, loot-table hookup)
+can be built and proven before any real art exists. See
 [03-TECH-ARCHITECTURE.md](03-TECH-ARCHITECTURE.md).
 
 ## What "done" looks like early on

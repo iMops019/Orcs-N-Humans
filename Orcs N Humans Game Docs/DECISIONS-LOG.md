@@ -40,16 +40,32 @@ permanent progression, or vice versa). See
 
 The user asked directly which of two approaches to use: sum a per-
 enemy-tier value across all kills, or a flat reward per dungeon.
-Recommended (and adopted as the Phase 0 starting point, not a locked
-number) combining both - flat `dungeonBaseXp[dungeon][difficulty]` as
-the main per-content-piece knob, plus a small `tierXpValue[tier]`
+Recommended combining both - flat `dungeonBaseXp[dungeon][difficulty]`
+as the main per-content-piece knob, plus a small `tierXpValue[tier]`
 bonus per kill on top. Reasoning: a pure kill-sum rewards longer/
 slower runs over efficient ones once enemy counts get into the
 hundreds-to-thousands, and is hard to balance across dungeons with
 different enemy density; a pure flat-per-dungeon number throws away
-the point of having four enemy tiers at all. Both values are meant to
-live in data files and get tuned once there's a playable loop - see
-`01-VISION-AND-GOALS.md` for the full reasoning and the formula.
+the point of having four enemy tiers at all. **Confirmed by the user
+2026-09-13.** The formula shape is now locked; `dungeonBaseXp` and
+`tierXpValue`'s actual numbers are not - both live in data files and
+get tuned once there's a playable loop. See `01-VISION-AND-GOALS.md`
+for the full reasoning and the formula.
+
+## 2026-09-13 — Enemy tiers also scale HP and damage, not just loot/XP
+
+Originally the four enemy tiers (Normal/Elite/Epic/Legendary) only
+drove loot odds and Overall XP value in the design doc; the user
+confirmed they should also scale enemy **HP and damage**, each tier
+multiplying a shared base stat block. Adopted starting-point
+multipliers (front-loaded toward HP over damage, so a Legendary reads
+as a tanky detour rather than an instant-death spike near the swarm):
+Normal 1×/1×, Elite 4×/1.5×, Epic 12×/2.5×, Legendary 40×/4× (HP/
+damage). Not balanced - a Phase 1/4 tuning target once there's a
+playable loop. Overall XP per tier deliberately does NOT scale 1:1
+with the HP multiplier, so the flat per-dungeon base stays the
+dominant term in the XP formula above. See
+`01-VISION-AND-GOALS.md`'s Enemy tiers section for the full table.
 
 ## 2026-09-13 — Placeholder enemy: one Meshy goblin sprite for all four tiers
 

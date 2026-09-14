@@ -18,8 +18,10 @@ StateStack, ...) is covered in the engine repo's own `GLOSSARY.md`.
   passive points are spent on. The game's central build-crafting
   system (see `01-VISION-AND-GOALS.md`).
 - **Tier (Normal / Elite / Epic / Legendary)** — every enemy's
-  classification; drives spawn weight, HP/damage scaling, loot odds,
-  and Overall XP contribution.
+  classification; multiplies a shared base stat block for HP and
+  damage, and drives spawn weight, loot odds, and Overall XP
+  contribution. See `01-VISION-AND-GOALS.md`'s Enemy tiers section for
+  the starting-point multiplier table.
 - **Dungeon** — one selectable piece of content (its own base Overall
   XP value and difficulty), entered from town, ending in either a
   clear or a death.
