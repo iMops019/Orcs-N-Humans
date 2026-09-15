@@ -21,12 +21,16 @@ using engine::render::SpriteAnimator;
 using engine::render::SpriteClipSet;
 
 namespace {
-// Baked goblin frames crop to ~140-250px tall at native render size
-// (same ballpark as the player's own baked frames) - 0.28 (vs the
-// player's 0.35) reads as a bit smaller/weaker than the player at
-// Normal tier, before def.scale multiplies it up for Elite/Epic/
-// Legendary. Eyeball-tuned, adjust freely.
-constexpr float kEnemyBaseVisualScale = 0.28f;
+// Baked goblin frames crop to ~140-250px tall at ORIGINAL 512px render
+// resolution (same ballpark as the player's own baked frames) - 0.28
+// (vs the player's 0.35) reads as a bit smaller/weaker than the player
+// at Normal tier, before def.scale multiplies it up for Elite/Epic/
+// Legendary. The art was later downscaled to 220px source resolution
+// to fix a slow-load hang (see DECISIONS-LOG.md), which shrinks
+// on-screen size by that same ratio unless compensated for - see
+// SwarmArenaState.cpp's player visualScale for the same fix. Eyeball-
+// tuned once, still adjust freely.
+constexpr float kEnemyBaseVisualScale = 0.28f * (512.0f / 220.0f);
 } // namespace
 
 void spawnEnemyWave(Registry& registry, const TierTable& tiers, std::mt19937& rng, int count, float arenaWidth,

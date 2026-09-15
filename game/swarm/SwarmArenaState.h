@@ -65,6 +65,11 @@ private:
     // spawnEnemyWave) - one set of GPU textures for the whole swarm,
     // not one per entity.
     engine::render::SpriteClipSet m_enemyClips;
+    // The player's arrow projectile - a single static prop (not
+    // directional/animated), loaded via AssetManager like any other
+    // one-off texture, rotated per-shot at draw time to match its
+    // Velocity instead of needing 16 baked facings.
+    engine::render::Texture* m_arrowTexture = nullptr;
     std::mt19937 m_rng{std::random_device{}()};
 
     RunPhase m_phase = RunPhase::Playing;

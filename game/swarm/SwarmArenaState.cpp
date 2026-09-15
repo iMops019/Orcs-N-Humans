@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "engine/assets/AssetManager.h"
 #include "engine/ecs/Components.h"
 #include "engine/ecs/Registry.h"
 #include "engine/ecs/Systems.h"
@@ -39,7 +40,11 @@ SwarmArenaState::SwarmArenaState(int windowWidth, int windowHeight)
 SwarmArenaState::~SwarmArenaState() = default;
 
 void SwarmArenaState::onEnter(engine::render::Renderer& renderer, engine::assets::AssetManager& assets) {
-    (void)assets; // DirectionalAnimation (via SpriteClipSet::loadClip below) bypasses AssetManager - see its own header comment
+    // Character clips (SpriteClipSet::loadClip below) bypass AssetManager
+    // entirely - see DirectionalAnimation's own header comment - but the
+    // arrow prop is a single static texture, so it's the one thing here
+    // that actually goes through it.
+    m_arrowTexture = assets.loadTexture("assets/textures/props/arrow.png");
 
     m_textReady = m_text.init() && m_text.loadFont("C:\\Windows\\Fonts\\arial.ttf", 20);
 
@@ -60,10 +65,14 @@ void SwarmArenaState::onEnter(engine::render::Renderer& renderer, engine::assets
     m_playerAnim.clips = &m_playerClips;
     m_playerAnim.loopState = static_cast<int>(PlayerAnimState::Idle);
     m_playerAnim.fallbackState = static_cast<int>(PlayerAnimState::Idle);
-    // Baked frames crop to ~150-230px tall at native render size; 0.35
-    // brings that down to a scale that reads sensibly against the
-    // swarm's enemy/projectile sizes - eyeball-tuned, adjust freely.
-    m_playerAnim.visualScale = 0.35f;
+    // Baked frames were originally rendered at 512px, cropped to
+    // ~150-230px tall content, with 0.35 tuned to read sensibly against
+    // the swarm's enemy/projectile sizes - then downscaled to 220px
+    // source resolution to fix a slow-load hang (see DECISIONS-LOG.md),
+    // which shrinks on-screen size by that same ratio unless compensated
+    // for. 0.35 * (512/220) restores the original on-screen size:
+    // eyeball-tuned once, still adjust freely.
+    m_playerAnim.visualScale = 0.35f * (512.0f / 220.0f);
 
     // Same pipeline, goblin's own baked sequences - the enemy Attack
     // clip is whatever melee-reading pose was picked from Meshy's
@@ -280,9 +289,24 @@ void SwarmArenaState::render(engine::render::Renderer& renderer) {
         renderer.fillRect(static_cast<int>(t.x) - 5, static_cast<int>(t.y) - 5, 10, 10, 235, 220, 90, 255);
     }
 
+    auto& velocities = m_registry->poolFor<engine::ecs::Velocity>();
     for (const engine::ecs::Entity shot : m_registry->poolFor<Projectile>().entities()) {
         const auto& t = transforms.get(shot);
-        renderer.fillRect(static_cast<int>(t.x) - 3, static_cast<int>(t.y) - 3, 6, 6, 235, 235, 235, 255);
+        if (m_arrowTexture != nullptr) {
+            // The arrow art's own rest pose already points along
+            // screen-right (angle 0) - see assets/textures/props/arrow.png's
+            // own render notes - so the shot's raw Velocity angle IS the
+            // rotation needed, no base-angle offset to subtract.
+            const engine::ecs::Velocity& v = velocities.get(shot);
+            const float angleDegrees = std::atan2(v.y, v.x) * (180.0f / 3.14159265f);
+            constexpr float kArrowLength = 34.0f;
+            constexpr float kArrowThickness = 7.0f;
+            renderer.drawTextureRotated(m_arrowTexture, t.x - kArrowLength / 2.0f, t.y - kArrowThickness / 2.0f,
+                                         static_cast<int>(kArrowLength), static_cast<int>(kArrowThickness), angleDegrees,
+                                         engine::render::Camera{});
+        } else {
+            renderer.fillRect(static_cast<int>(t.x) - 3, static_cast<int>(t.y) - 3, 6, 6, 235, 235, 235, 255);
+        }
     }
 
     auto& enemyAnimators = m_registry->poolFor<engine::render::SpriteAnimator>();
