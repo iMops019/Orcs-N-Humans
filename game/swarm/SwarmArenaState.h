@@ -4,6 +4,7 @@
 #include <random>
 #include <string>
 
+#include "engine/render/SpriteAnimator.h"
 #include "engine/render/TextRenderer.h"
 #include "engine/scene/GameState.h"
 
@@ -37,6 +38,12 @@ public:
 private:
     enum class RunPhase { Playing, LevelUp, Summary };
 
+    // Cast to int for SpriteAnimator::loopState/onceState/fallbackState -
+    // see PlayerAnimState's loadClip() calls in onEnter() for which
+    // baked facing-sequence folder (assets/textures/characters_animated/)
+    // each state maps to.
+    enum class PlayerAnimState { Idle, Walk, Attack };
+
     void resetRun();
     void beginSummary(const std::string& outcome);
     void applyBoonPick(int index);
@@ -52,6 +59,12 @@ private:
     TierTable m_tiers;
     DungeonTable m_dungeons;
     PlayerState m_player;
+    engine::render::SpriteClipSet m_playerClips;
+    engine::render::SpriteAnimator m_playerAnim;
+    // Shared by every spawned enemy's own SpriteAnimator component (see
+    // spawnEnemyWave) - one set of GPU textures for the whole swarm,
+    // not one per entity.
+    engine::render::SpriteClipSet m_enemyClips;
     std::mt19937 m_rng{std::random_device{}()};
 
     RunPhase m_phase = RunPhase::Playing;

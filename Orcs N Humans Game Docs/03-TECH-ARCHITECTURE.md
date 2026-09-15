@@ -61,11 +61,20 @@ Measure before optimizing, same rule as everywhere else in this
 engine: get the swarm spawner working correctly first, profile with
 F3's DebugHud, and only then decide what actually needs batching.
 
-## Placeholder enemy art
+## Character animation: baked 16-facing frame sequences, not sprite-sheet-per-frame math
 
-Phase 0/1 enemies are one small 2D sprite (a Meshy-generated goblin,
-via the engine's existing Meshy → Blender isometric-render pipeline,
-or a flat 2D asset if that's faster to get in) reused across all four
-tiers via tint + scale, so the tier/spawn/XP/loot systems can be built
-and tested before any real art pipeline work happens for this game
-specifically.
+Player (peasant/Bow Character) and goblin both have real Idle/Walk/
+Attack animation, rendered directly from Meshy's animated rigs rather
+than authored by hand: `DarkXEngine/tools/BlenderScripts/render_facing_sequence.py`
+poses the actual 3D mesh per sampled frame, once per one of
+`engine::render::DirectionalAnimation`'s 16 compass facings, straight
+to PNG (`assets/textures/characters_animated/<clip>/<COMPASS>/`) - see
+`DECISIONS-LOG.md` for why an earlier attempt (2D-cutout-rig rotate/
+offset curves, `game/anim/CharacterRig`) was abandoned in favor of
+this. Loaded/played via `engine::render::SpriteClipSet`/`SpriteAnimator`
+in `SwarmArenaState`; enemies get a real `SpriteAnimator` ECS component
+per spawn, the player (deliberately not an ECS entity) keeps its own as
+a plain state member. Tier differentiation (Elite/Epic/Legendary) is
+still tint + scale over the one Normal-tier goblin model, not separate
+art per tier - that part of the original placeholder-art plan still
+holds.

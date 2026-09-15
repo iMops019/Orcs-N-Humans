@@ -6,6 +6,12 @@ enum class EnemyTier { Normal, Elite, Epic, Legendary, Count };
 
 constexpr int kTierCount = static_cast<int>(EnemyTier::Count);
 
+// Cast to int for engine::render::SpriteAnimator::loopState/onceState -
+// shared between SwarmSystems.cpp (spawns/drives it) and
+// SwarmArenaState.cpp (loads the clips, draws it), so it lives here
+// rather than nested in either.
+enum class EnemyAnimState { Idle, Walk, Attack };
+
 // Game-specific ECS components (see engine/ecs/Components.h's own
 // comment on why these live here, not in the engine) - every swarm
 // enemy, projectile, and XP orb is a plain engine::ecs::Entity built

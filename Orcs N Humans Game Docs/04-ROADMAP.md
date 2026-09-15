@@ -27,6 +27,12 @@
 - [x] End-of-run summary screen: kills-by-tier, Overall XP awarded
       (see `01-VISION-AND-GOALS.md`'s formula), win (survive 3:00) and
       death both handled
+- [x] Real Idle/Walk/Attack animation for player (peasant/Bow Character)
+      and goblin, 16-facing baked sprite sequences rendered from Meshy's
+      animated rigs - replaces the placeholder tinted rects both used
+      through the rest of Phase 1 (see `DECISIONS-LOG.md`). Pulled
+      forward from Phase 4's "real art" item below since the pipeline
+      to produce it landed first.
 - [ ] Stress-test toward ~1,000 concurrent enemies with F3's DebugHud
       (F6 spawns a 100-enemy burst for this); only then decide if/what
       needs batching (see `03-TECH-ARCHITECTURE.md`) - **user to run
@@ -53,8 +59,11 @@
 
 ## Phase 4 — Content + real art
 
-- [ ] Replace the placeholder goblin with real tiered enemy art
-      (Meshy pipeline or hand-authored)
+- [x] Replace the placeholder goblin with real animated enemy art
+      (Idle/Walk/Attack, 16 facings - see Phase 1 above and
+      `DECISIONS-LOG.md`). **Not yet done:** distinct art per tier -
+      Elite/Epic/Legendary still differentiate via tint/scale over the
+      same Normal-tier goblin model, not separate Meshy models.
 - [ ] More dungeons, more enemy variety, Passive Tree fleshed out past
       its first-pass shape
 - [ ] Balance pass on the Overall XP formula and tier values once

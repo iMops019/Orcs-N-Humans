@@ -3,6 +3,98 @@
 Newest first. Records *why*, not just *what* — see the engine repo's
 own `DECISIONS-LOG.md` for the same convention.
 
+## 2026-09-14 — Real Idle/Walk/Attack animation for player and goblin, via baked facing sequences (not the CharacterRig curve rig)
+
+Picks up directly from the entry below ("First two CharacterRig
+entries") - posed clips are done, but NOT via the CharacterRig/2D-
+Animator curve-authoring path that entry expected. Full technical
+account (the two approaches tried, the exact facing-angle math, the
+known one-shot-restart rough edge) lives in the engine repo's own
+`DECISIONS-LOG.md`, "Animated-clip authoring: two approaches tried, one
+adopted" - this entry covers the game-specific decisions on top of it.
+
+**Why the switch:** the curve-rig approach (rotate/offset each body-part
+sprite per bone) broke down hard on the peasant's bow-draw attack - a
+2D cutout can only rotate around one screen-plane axis, but drawing a
+bow swings the whole arm through real depth. Since Meshy already hands
+over a FULLY posed, animated 3D mesh per clip, the actual fix was to
+stop approximating it: render the real posed mesh directly, once per
+frame, once per facing (16-point compass, reusing
+`engine::render::DirectionalAnimation`'s existing folder convention -
+built engine-side years before this game existed, never fed by
+anything until now). Zero approximation error, and it sidesteps the
+whole rotation-instability class of problem entirely.
+
+**Real bug found along the way, worth remembering:** `peasant_rigged.fbx`
+(the STATIC export the sprite art/`character_rigs.json` attach points
+were built from) and the separately-exported ANIMATED FBXs (`peasant_idle.fbx`
+etc.) do NOT share an identical rest skeleton, even though both claim
+to be "the same rig" - confirmed by directly comparing a joint's rest
+position between the two files and finding a large, clearly-not-
+rounding-noise discrepancy. Apparently Meshy's separate export/rig
+passes aren't guaranteed pixel-identical. Irrelevant now that the
+curve-rig path is unused for these clips, but worth knowing if that
+path ever gets revived for hand-authored poses.
+
+**Clips chosen:**
+- **Peasant** (`assets/textures/characters_animated/peasant_idle|walk|bow_attack/`) - Idle, Walk, and an Archery Shot used as the Attack (this is the Bowman class's first weapon, so a bow draw is the actually-correct attack pose here, not a placeholder pick).
+- **Goblin** (`.../goblin_idle|walk|attack/`) - Idle and Walk are straightforward; nothing in Meshy's animation list read as a goblin-appropriate attack, so the user picked "Shield Push Left" on visual merit alone and it's used as Attack regardless of literal name.
+
+**Gameplay wiring** (`game/swarm/SwarmArenaState.*`/`SwarmSystems.*`):
+placeholder tinted rects for both the player and enemies are gone,
+replaced with the real baked sprites via `SpriteAnimator`/
+`SpriteClipSet`/`resolveSpriteFrame` (engine components that existed
+but had zero live callers before this - see the engine log entry).
+Enemies are ECS entities, so they get a real `SpriteAnimator` component
+per spawn and get ticked in a batch via
+`engine::render::systems::advanceSpriteAnimators`; the player is
+deliberately NOT an ECS entity (`PlayerState`'s own long-standing
+design, see the "Phase 1 built" entry below) so `m_playerAnim` lives as
+a plain `SwarmArenaState` member, ticked by hand instead.
+
+**Player attack-facing is Halls of Torment-style, not movement-locked**:
+`updatePlayerAttack` now reports the nearest in-range enemy's direction
+every frame (not just on the frame a shot fires), and that overrides
+movement-direction facing whenever a target exists - so strafing around
+an enemy keeps the player visually facing it, matching the genre
+convention the user asked for by name. A future "Auto Attack on/off"
+settings toggle was raised as a want but not built - noted for later,
+doesn't change today's targeting behavior either way.
+
+**Enemy Attack is contact-triggered, not cooldown-based** - by design,
+per the user's explicit call: enemies don't have a discrete "swing"
+action the way the player's ranged auto-fire does, only continuous
+contact damage, so `updateContactDamage` now reports which enemy (if
+any) actually landed a hit each frame, and that entity's Attack one-
+shot plays on top of its Walk loop.
+
+**Bug found and fixed the same session**: the player's attack-facing
+was initially gated on `!m_playerAnim.playingOnce()` (mirroring a
+reference pattern from a discrete-melee-swing game) - but this game's
+attack auto-fires every `attackCooldown` (0.6s) at any target in range,
+far more often than the ~2s Attack clip takes to play out, so
+`playingOnce()` stayed true almost continuously once the swarm picked
+up. Facing froze the instant combat started and never moved again for
+the rest of the run. Fixed by simply not gating movement/target facing
+on attack state at all - the Attack clip has all 16 facings rendered
+too, so there was never a real reason to.
+
+**Known rough edge, not fixed**: an Attack one-shot re-triggered faster
+than its own playback length restarts from frame 0 instead of
+finishing - true for both the player (0.6s cooldown vs. ~2s clip) and
+the goblin (each contact hit vs. the Shield Push clip's own length)
+once combat gets busy. A clip-fps/cadence tuning question, not a
+correctness bug - left for a later pass.
+
+**Tooling housekeeping**: `tools/BlenderScripts/extract_animation_clip.py`
+(the abandoned curve-rig extractor) and its `assets/data/animations.json`
+output stay in the repo - the cutout-puppet approach is still the right
+tool for hand-authored poses or heavy per-part gear/tint variation,
+just not for these Meshy-sourced clips - but `animations.json` itself
+was emptied back out (the 3 curve-based clips it briefly held are
+superseded by the baked sequences above) rather than left as dead,
+confusing data.
+
 ## 2026-09-14 — First two CharacterRig entries: goblin and the Bow Character body
 
 `assets/data/character_rigs.json` now has real rigs for both the

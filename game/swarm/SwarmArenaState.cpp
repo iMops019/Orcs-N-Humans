@@ -9,6 +9,7 @@
 #include "engine/ecs/Systems.h"
 #include "engine/input/InputMap.h"
 #include "engine/physics/Vec2.h"
+#include "engine/render/AnimationSystems.h"
 #include "engine/render/Renderer.h"
 
 #include "Boons.h"
@@ -38,12 +39,44 @@ SwarmArenaState::SwarmArenaState(int windowWidth, int windowHeight)
 SwarmArenaState::~SwarmArenaState() = default;
 
 void SwarmArenaState::onEnter(engine::render::Renderer& renderer, engine::assets::AssetManager& assets) {
-    (void)assets; // no textures yet - Phase 1 draws placeholder rects only, see 01-VISION-AND-GOALS.md
+    (void)assets; // DirectionalAnimation (via SpriteClipSet::loadClip below) bypasses AssetManager - see its own header comment
 
     m_textReady = m_text.init() && m_text.loadFont("C:\\Windows\\Fonts\\arial.ttf", 20);
 
     m_tiers.loadFromFile("assets/data/enemy_tiers.json");
     m_dungeons.loadFromFile("assets/data/dungeons.json");
+
+    // Baked 16-facing frame sequences rendered directly from Meshy's
+    // animated rig (see Orcs N Humans Game Docs/DECISIONS-LOG.md for why
+    // this replaced an earlier 2D-cutout-rig curve-extraction attempt -
+    // it broke down on any pose with real depth, like the bow draw).
+    // Idle/Walk loop; Attack is a one-shot played over the loop.
+    m_playerClips.loadClip(static_cast<int>(PlayerAnimState::Idle), "assets/textures/characters_animated/peasant_idle",
+                            renderer, 12.0f, true);
+    m_playerClips.loadClip(static_cast<int>(PlayerAnimState::Walk), "assets/textures/characters_animated/peasant_walk",
+                            renderer, 16.0f, true);
+    m_playerClips.loadClip(static_cast<int>(PlayerAnimState::Attack),
+                            "assets/textures/characters_animated/peasant_bow_attack", renderer, 16.0f, false);
+    m_playerAnim.clips = &m_playerClips;
+    m_playerAnim.loopState = static_cast<int>(PlayerAnimState::Idle);
+    m_playerAnim.fallbackState = static_cast<int>(PlayerAnimState::Idle);
+    // Baked frames crop to ~150-230px tall at native render size; 0.35
+    // brings that down to a scale that reads sensibly against the
+    // swarm's enemy/projectile sizes - eyeball-tuned, adjust freely.
+    m_playerAnim.visualScale = 0.35f;
+
+    // Same pipeline, goblin's own baked sequences - the enemy Attack
+    // clip is whatever melee-reading pose was picked from Meshy's
+    // animation list ("Shield Push Left"), triggered on each contact
+    // hit rather than on a cooldown timer (see updateContactDamage's
+    // caller in update()) since enemies don't have a discrete "swing"
+    // action, only continuous contact damage.
+    m_enemyClips.loadClip(static_cast<int>(EnemyAnimState::Idle), "assets/textures/characters_animated/goblin_idle",
+                           renderer, 10.0f, true);
+    m_enemyClips.loadClip(static_cast<int>(EnemyAnimState::Walk), "assets/textures/characters_animated/goblin_walk",
+                           renderer, 14.0f, true);
+    m_enemyClips.loadClip(static_cast<int>(EnemyAnimState::Attack), "assets/textures/characters_animated/goblin_attack",
+                           renderer, 16.0f, false);
 
     resetRun();
 }
@@ -54,6 +87,16 @@ void SwarmArenaState::resetRun() {
     m_player = PlayerState{};
     m_player.x = static_cast<float>(m_windowWidth) / 2.0f;
     m_player.y = static_cast<float>(m_windowHeight) / 2.0f;
+
+    // Reset per-run playback state, but not m_playerAnim.clips/
+    // fallbackState/visualScale - those are onEnter()-time config, not
+    // per-run state.
+    m_playerAnim.loopState = static_cast<int>(PlayerAnimState::Idle);
+    m_playerAnim.loopTime = 0.0f;
+    m_playerAnim.stopOnce();
+    m_playerAnim.onceTime = 0.0f;
+    m_playerAnim.facingX = 0.0f;
+    m_playerAnim.facingY = 1.0f;
 
     m_runTimeSeconds = 0.0f;
     m_spawnTimer = kInitialSpawnDelay;
@@ -117,7 +160,7 @@ void SwarmArenaState::handleEvent(const SDL_Event& event) {
     // past prototyping.
     if (event.key.scancode == SDL_SCANCODE_F6) {
         systems::spawnEnemyWave(*m_registry, m_tiers, m_rng, 100, static_cast<float>(m_windowWidth),
-                                 static_cast<float>(m_windowHeight));
+                                 static_cast<float>(m_windowHeight), m_enemyClips);
     }
 }
 
@@ -139,21 +182,79 @@ void SwarmArenaState::update(float deltaTime, const engine::input::InputMap& inp
     m_player.x = std::clamp(m_player.x, systems::kPlayerRadius, static_cast<float>(m_windowWidth) - systems::kPlayerRadius);
     m_player.y = std::clamp(m_player.y, systems::kPlayerRadius, static_cast<float>(m_windowHeight) - systems::kPlayerRadius);
 
+    // Facing only updates while actually moving - holding still keeps
+    // whatever direction was last faced, matching
+    // DirectionalAnimation::currentFrame()'s screen-space (dx,dy)
+    // convention (see its own header comment).
+    const bool playerMoving = move.x != 0.0f || move.y != 0.0f;
+    if (playerMoving) {
+        m_playerAnim.facingX = move.x;
+        m_playerAnim.facingY = move.y;
+    }
+    m_playerAnim.loopState = static_cast<int>(playerMoving ? PlayerAnimState::Walk : PlayerAnimState::Idle);
+
     systems::updateEnemySeek(*m_registry, m_player);
-    systems::updatePlayerAttack(*m_registry, m_player, deltaTime);
+    const systems::AttackUpdateResult attack = systems::updatePlayerAttack(*m_registry, m_player, deltaTime);
+    // A target in range overrides movement facing (Halls of Torment-
+    // style: face what you're shooting at, not necessarily where
+    // you're walking) - reported every frame a target exists, not just
+    // the frame a shot fires, so facing tracks the target continuously
+    // rather than snapping only at each 0.6s shot. Deliberately NOT
+    // gated on "not mid-attack": this game's attack auto-fires far more
+    // often than the ~2s Attack clip takes to play out, so playingOnce()
+    // is true almost continuously once the swarm picks up - gating
+    // facing on it froze facing for the rest of the run the first time
+    // combat started. The Attack clip has all 16 facings rendered too,
+    // so there's no visual cost to keeping facing live while it plays.
+    if (attack.hasTarget) {
+        m_playerAnim.facingX = attack.targetDirection.x;
+        m_playerAnim.facingY = attack.targetDirection.y;
+    }
+    if (attack.fired) {
+        m_playerAnim.playOnce(static_cast<int>(PlayerAnimState::Attack));
+    }
     systems::updateXpOrbs(*m_registry, m_player, deltaTime); // sets magnet velocity - before applyVelocity moves it
+
+    // No ECS registry entry for the player, so advanceSpriteAnimators()
+    // (which ticks every SpriteAnimator IN a Registry) doesn't reach
+    // m_playerAnim - tick its two clocks by hand instead.
+    m_playerAnim.loopTime += deltaTime;
+    if (m_playerAnim.playingOnce()) {
+        m_playerAnim.onceTime += deltaTime;
+        if (m_playerAnim.onceFinished()) {
+            m_playerAnim.stopOnce();
+        }
+    }
 
     engine::ecs::systems::applyVelocity(*m_registry, deltaTime);
     engine::ecs::systems::resolveCircleCollisions(*m_registry); // jostles overlapping enemies apart
 
     systems::updateProjectiles(*m_registry, m_player, m_tiers, deltaTime); // reads post-move positions
-    systems::updateContactDamage(*m_registry, m_player, deltaTime);        // reads post-move positions
+    const engine::ecs::Entity attacker =
+        systems::updateContactDamage(*m_registry, m_player, deltaTime); // reads post-move positions
+    auto& enemyAnimators = m_registry->poolFor<engine::render::SpriteAnimator>();
+    if (attacker != engine::ecs::kInvalidEntity && enemyAnimators.has(attacker)) {
+        enemyAnimators.get(attacker).playOnce(static_cast<int>(EnemyAnimState::Attack));
+    }
+
+    // Ticks loopTime/onceTime for every enemy's SpriteAnimator (every
+    // enemy always has one - see spawnEnemyWave). Doesn't auto-clear a
+    // finished one-shot (see AnimationSystems.h/SpriteAnimator.h's own
+    // comments on why the caller owns that) - the loop right after does.
+    // m_playerAnim isn't in the registry (see resetRun()'s comment), so
+    // it's ticked by hand separately, above.
+    engine::render::systems::advanceSpriteAnimators(*m_registry, deltaTime);
+    for (engine::render::SpriteAnimator& animator : enemyAnimators.components()) {
+        if (animator.playingOnce() && animator.onceFinished()) {
+            animator.stopOnce();
+        }
+    }
 
     m_spawnTimer -= deltaTime;
     if (m_spawnTimer <= 0.0f) {
         const int waveSize = 1 + static_cast<int>(m_runTimeSeconds / 12.0f);
         systems::spawnEnemyWave(*m_registry, m_tiers, m_rng, waveSize, static_cast<float>(m_windowWidth),
-                                 static_cast<float>(m_windowHeight));
+                                 static_cast<float>(m_windowHeight), m_enemyClips);
         m_spawnTimer = std::max(0.25f, 1.1f - m_runTimeSeconds * 0.004f);
     }
 
@@ -184,23 +285,56 @@ void SwarmArenaState::render(engine::render::Renderer& renderer) {
         renderer.fillRect(static_cast<int>(t.x) - 3, static_cast<int>(t.y) - 3, 6, 6, 235, 235, 235, 255);
     }
 
+    auto& enemyAnimators = m_registry->poolFor<engine::render::SpriteAnimator>();
     for (const engine::ecs::Entity enemy : m_registry->poolFor<EnemyTag>().entities()) {
         const auto& t = transforms.get(enemy);
         const EnemyTier tier = m_registry->getComponent<EnemyTag>(enemy).tier;
         const TierDefinition& def = m_tiers.get(tier);
-        const int half = static_cast<int>(systems::kEnemyBaseRadius * def.scale);
-        renderer.fillRect(static_cast<int>(t.x) - half, static_cast<int>(t.y) - half, half * 2, half * 2, def.tint.r,
-                           def.tint.g, def.tint.b, 255);
+
+        const engine::render::SpriteAnimator& animator = enemyAnimators.get(enemy);
+        const engine::render::ResolvedSpriteFrame frame = engine::render::resolveSpriteFrame(animator);
+        engine::render::Texture* texture =
+            frame.clip != nullptr ? frame.clip->currentFrame(animator.facingX, animator.facingY, frame.sampleTime)
+                                   : nullptr;
+        if (texture != nullptr) {
+            int contentW = 0, contentH = 0;
+            frame.clip->contentSize(contentW, contentH);
+            const float drawW = static_cast<float>(contentW) * animator.visualScale;
+            const float drawH = static_cast<float>(contentH) * animator.visualScale;
+            renderer.drawTexture(texture, t.x - drawW / 2.0f, t.y - drawH / 2.0f, static_cast<int>(drawW),
+                                  static_cast<int>(drawH), engine::render::Camera{}, def.tint.r, def.tint.g, def.tint.b,
+                                  255);
+        } else {
+            // Art failed to load - fall back to the original placeholder rect.
+            const int half = static_cast<int>(systems::kEnemyBaseRadius * def.scale);
+            renderer.fillRect(static_cast<int>(t.x) - half, static_cast<int>(t.y) - half, half * 2, half * 2, def.tint.r,
+                               def.tint.g, def.tint.b, 255);
+        }
     }
 
-    const int playerHalf = static_cast<int>(systems::kPlayerRadius);
     const bool flash = m_player.invulnTimer > 0.0f && std::fmod(m_player.invulnTimer, 0.2f) > 0.1f;
-    if (flash) {
-        renderer.fillRect(static_cast<int>(m_player.x) - playerHalf, static_cast<int>(m_player.y) - playerHalf,
-                           playerHalf * 2, playerHalf * 2, 235, 90, 90, 255);
+    const engine::render::ResolvedSpriteFrame playerFrame = engine::render::resolveSpriteFrame(m_playerAnim);
+    engine::render::Texture* playerTexture =
+        playerFrame.clip != nullptr ? playerFrame.clip->currentFrame(m_playerAnim.facingX, m_playerAnim.facingY,
+                                                                       playerFrame.sampleTime)
+                                     : nullptr;
+    if (playerTexture != nullptr) {
+        int contentW = 0, contentH = 0;
+        playerFrame.clip->contentSize(contentW, contentH);
+        const float drawW = static_cast<float>(contentW) * m_playerAnim.visualScale;
+        const float drawH = static_cast<float>(contentH) * m_playerAnim.visualScale;
+        const Uint8 tintR = flash ? 235 : 255;
+        const Uint8 tintG = flash ? 90 : 255;
+        const Uint8 tintB = flash ? 90 : 255;
+        renderer.drawTexture(playerTexture, m_player.x - drawW / 2.0f, m_player.y - drawH / 2.0f,
+                              static_cast<int>(drawW), static_cast<int>(drawH), engine::render::Camera{}, tintR, tintG,
+                              tintB, 255);
     } else {
+        // Art failed to load (missing folder, bad build) - fall back to
+        // the original placeholder rect rather than drawing nothing.
+        const int playerHalf = static_cast<int>(systems::kPlayerRadius);
         renderer.fillRect(static_cast<int>(m_player.x) - playerHalf, static_cast<int>(m_player.y) - playerHalf,
-                           playerHalf * 2, playerHalf * 2, 90, 170, 230, 255);
+                           playerHalf * 2, playerHalf * 2, flash ? 235 : 90, flash ? 90 : 170, flash ? 90 : 230, 255);
     }
 
     drawHud(renderer);

@@ -6,6 +6,8 @@
 #include "engine/ecs/Components.h"
 #include "engine/ecs/Registry.h"
 #include "engine/physics/Vec2.h"
+#include "engine/render/SpriteAnimator.h"
+#include "engine/render/SpriteClipSet.h"
 
 namespace game::swarm::systems {
 
@@ -15,9 +17,20 @@ using engine::ecs::Registry;
 using engine::ecs::Transform;
 using engine::ecs::Velocity;
 using engine::physics::Vec2;
+using engine::render::SpriteAnimator;
+using engine::render::SpriteClipSet;
+
+namespace {
+// Baked goblin frames crop to ~140-250px tall at native render size
+// (same ballpark as the player's own baked frames) - 0.28 (vs the
+// player's 0.35) reads as a bit smaller/weaker than the player at
+// Normal tier, before def.scale multiplies it up for Elite/Epic/
+// Legendary. Eyeball-tuned, adjust freely.
+constexpr float kEnemyBaseVisualScale = 0.28f;
+} // namespace
 
 void spawnEnemyWave(Registry& registry, const TierTable& tiers, std::mt19937& rng, int count, float arenaWidth,
-                     float arenaHeight) {
+                     float arenaHeight, const SpriteClipSet& enemyClips) {
     std::uniform_real_distribution<float> perimeterDist(0.0f, 1.0f);
     constexpr float kSpawnMargin = 48.0f; // spawn just outside the visible arena, not right at the edge
 
@@ -60,6 +73,13 @@ void spawnEnemyWave(Registry& registry, const TierTable& tiers, std::mt19937& rn
         registry.addComponent(enemy, Health{kEnemyBaseHp * def.hpMultiplier, kEnemyBaseHp * def.hpMultiplier});
         registry.addComponent(enemy, EnemyTag{tier});
         registry.addComponent(enemy, ContactDamage{kEnemyBaseDamage * def.damageMultiplier});
+
+        SpriteAnimator animator;
+        animator.clips = &enemyClips;
+        animator.loopState = static_cast<int>(EnemyAnimState::Idle);
+        animator.fallbackState = static_cast<int>(EnemyAnimState::Idle);
+        animator.visualScale = kEnemyBaseVisualScale * def.scale;
+        registry.addComponent(enemy, animator);
     }
 }
 
@@ -67,6 +87,7 @@ void updateEnemySeek(Registry& registry, const PlayerState& player) {
     auto& transforms = registry.poolFor<Transform>();
     auto& velocities = registry.poolFor<Velocity>();
     auto& tags = registry.poolFor<EnemyTag>();
+    auto& animators = registry.poolFor<SpriteAnimator>();
 
     for (const Entity entity : tags.entities()) {
         const Transform& t = transforms.get(entity);
@@ -74,15 +95,26 @@ void updateEnemySeek(Registry& registry, const PlayerState& player) {
         Velocity& v = velocities.get(entity);
         v.x = toPlayer.x * kEnemyMoveSpeed;
         v.y = toPlayer.y * kEnemyMoveSpeed;
+
+        // Always "Walk" - an enemy that's seeking is by definition
+        // moving; there's no separate "stopped, not attacking" state
+        // for it to be Idle in yet (see EnemyAnimState's doc comment).
+        // Not gated on playingOnce() for the same reason the player's
+        // movement facing isn't - see updatePlayerAttack's caller in
+        // SwarmArenaState.cpp.
+        SpriteAnimator& animator = animators.get(entity);
+        animator.facingX = toPlayer.x;
+        animator.facingY = toPlayer.y;
+        animator.loopState = static_cast<int>(EnemyAnimState::Walk);
     }
 }
 
-void updatePlayerAttack(Registry& registry, PlayerState& player, float dt) {
+AttackUpdateResult updatePlayerAttack(Registry& registry, PlayerState& player, float dt) {
     player.attackTimer -= dt;
-    if (player.attackTimer > 0.0f) {
-        return;
-    }
 
+    // Searched every frame regardless of cooldown (unlike before) - see
+    // AttackUpdateResult's doc comment on why callers need target
+    // direction even on frames that don't fire.
     auto& transforms = registry.poolFor<Transform>();
     auto& tags = registry.poolFor<EnemyTag>();
 
@@ -97,12 +129,19 @@ void updatePlayerAttack(Registry& registry, PlayerState& player, float dt) {
         }
     }
 
+    AttackUpdateResult result;
     if (nearest == engine::ecs::kInvalidEntity) {
-        return; // nothing in range - keep the cooldown at 0 and try again next frame
+        return result; // nothing in range - keep the cooldown at 0 and try again next frame
     }
 
     const Transform& targetTransform = transforms.get(nearest);
     const Vec2 direction = normalized(Vec2{targetTransform.x, targetTransform.y} - Vec2{player.x, player.y});
+    result.hasTarget = true;
+    result.targetDirection = direction;
+
+    if (player.attackTimer > 0.0f) {
+        return result; // found a target, but still on cooldown
+    }
 
     const Entity shot = registry.createEntity();
     registry.addComponent(shot, Transform{player.x, player.y});
@@ -110,6 +149,8 @@ void updatePlayerAttack(Registry& registry, PlayerState& player, float dt) {
     registry.addComponent(shot, Projectile{player.attackDamage, 0.0f});
 
     player.attackTimer = player.attackCooldown;
+    result.fired = true;
+    return result;
 }
 
 void updateProjectiles(Registry& registry, PlayerState& player, const TierTable& tiers, float dt) {
@@ -182,10 +223,10 @@ void updateProjectiles(Registry& registry, PlayerState& player, const TierTable&
     }
 }
 
-void updateContactDamage(Registry& registry, PlayerState& player, float dt) {
+Entity updateContactDamage(Registry& registry, PlayerState& player, float dt) {
     player.invulnTimer = std::max(0.0f, player.invulnTimer - dt);
     if (player.invulnTimer > 0.0f) {
-        return;
+        return engine::ecs::kInvalidEntity;
     }
 
     auto& transforms = registry.poolFor<Transform>();
@@ -201,8 +242,9 @@ void updateContactDamage(Registry& registry, PlayerState& player, float dt) {
 
         player.hp -= contactDamages.get(enemy).damage;
         player.invulnTimer = kContactInvulnSeconds;
-        break; // one hit per invulnerability window, regardless of how many enemies are touching
+        return enemy; // one hit per invulnerability window, regardless of how many enemies are touching
     }
+    return engine::ecs::kInvalidEntity;
 }
 
 void updateXpOrbs(Registry& registry, PlayerState& player, float dt) {
